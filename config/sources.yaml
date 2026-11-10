@@ -1,0 +1,189 @@
+# 采集与判定配置。所有可调参数集中在此，代码不硬编码。
+
+run:
+  timezone: Asia/Shanghai
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+  timeout_seconds: 20
+  follow_redirects: true
+
+sources:
+  douyin_hot:
+    enabled: true
+    platform: douyin
+    url: "https://uapis.cn/api/v1/misc/hotboard?type=douyin"
+    limit: 60
+    qps_ms: 0
+
+  bili_search:
+    enabled: true
+    platform: bilibili
+    search_url: "https://api.bilibili.com/x/web-interface/search/all/v2"
+    tag_url: "https://api.bilibili.com/x/tag/archive/tags"
+    referer: "https://www.bilibili.com"
+    max_combos: 2        # 只做交叉验证：实测 10 组合对最终素材贡献 0，降到 2 省请求
+    top_n: 5             # 每个组合取播放量前 N 条
+    qps_ms: 320          # 请求间隔，单源频控
+
+  douyin_search:
+    enabled: true
+    platform: douyin
+    input: "data/input/douyin_latest.json"   # 由 Agent 用浏览器采集后写入
+    publish_time: 7                          # 采集 URL 的时间窗（天数）；0 表示不筛选
+    # 注意：内容级时效门槛在 `threshold.max_age_days`，这里只影响搜索 URL
+    # 计划优先：scripts/plan_queries.py 生成 data/input/query_plan.json
+    # 下面的 subjects/chart_songs/templates 只在没有计划文件时兜底
+    plan_file: "data/input/query_plan.json"
+    max_queries: 40        # 单轮查询上限
+    scroll: 5              # 每查询滚动次数（整页：16 + 10×5 ≈ 66 条）
+                           # 注：若用实验开关 --spa（页内改词），建议临时调到 8——
+                           # 改词不带 publish_time 过滤，需要更深才能收到同样多的新内容
+    delay_min: 8.0         # 查询间随机间隔（秒）。2026-11-07 实测：3~6 秒时第 16 个查询起全空
+    delay_max: 15.0        # 疑似会话级限流，先调慢到 8~15 秒观察；单轮总时长约 25~30 分钟
+    retries: 3             # 失败退避重试次数（5s→15s→45s）；502 单独走 30/90/180 秒
+    page_recycle: 12       # 每 N 个查询换一次页签：单页签连开几十个搜索页会把渲染进程撑爆
+                           # （2026-11-08 第 17 个查询时页签被关闭，浏览器还活着）
+    quota:                 # 计划里的配额分配
+      歌名: 15
+      挑战: 10
+      主体: 10
+      发现: 5
+    # 兜底参数
+    subjects: 2
+    chart_songs: 8
+    templates: "转场挑战"
+
+  douyin_music:
+    enabled: false       # 未接入；关闭时 BGM 证据标记为「不可用」
+    platform: douyin
+    note: "第三方 API 待定，暂不接入"
+
+  # BGM 主源：音乐平台榜单（服务端渲染，免登录）
+  # 抖音网页版不暴露 music 字段，但「谁发了新歌」在音乐平台是公开的
+  qq_music:
+    enabled: true
+    charts: ["27", "62", "26"]   # 27 新歌榜 / 62 飙升榜 / 26 热歌榜
+    max_rank: 30
+    qps_ms: 800            # 换榜之间的间隔（毫秒）。写 200 会被限流，热歌榜曾因此解析为空
+
+  # BGM 采样：只对「素材」抽代表视频的 BGM，不逐条抓
+  # 免费额度 100 次/天，预算留在 60，剩余给重试与临时补采
+  bgm_sampler:
+    enabled: true
+    base_url: "https://api.sandbase.ai"
+    endpoint: "/v1/api/douyin/app-v3/one-video-v3"
+    daily_budget: 60          # 每日最多调用次数
+    per_material: 1           # 每个素材抽几条代表视频
+    timeout_seconds: 15
+    cache: "data/state/bgm_cache.json"
+    cache_ttl_days: 7         # 缓存在 N 天后失效：挑战换配乐时能重新采
+    # 文案里已出现同一首歌 ≥ 这个比例时，直接推断为该素材的 BGM，不花配额
+    infer_ratio: 0.6
+
+threshold:
+  min_likes: 500          # L0 绝对下限
+  max_age_days: 7         # 超过 N 天的内容直接丢
+  percentile: 0.40        # L1 同批分位门槛（P40）
+
+judge:
+  max_hotspots: 8        # 圈内最多输出几条（跨圈另算 max_cross）
+  max_cross: 3           # 跨圈最多输出几条
+  per_anchor_cap: 2      # 同一主体单日最多几条
+  recent_days: 7         # 发布时间 ≤ N 天算强时效证据
+  # 跨天复用治理（2026-11-09）：同一张卡连续出现会让日报越来越像昨天
+  repeat_window_days: 4  # 往几天回看（读 data/daily/<日期>/materials.json）
+  max_repeat_cards: 3    # 单日最多保留几张「昨日已有」的卡
+  repeat_growth_min: 0.2 # 连续第 3 天出现时，mentions 至少要涨 20% 才继续占位
+  phrase_min_videos: 3   # 复用短语至少被几条不同视频使用
+
+  # 歧义主体：文本命中这些词时，才承认它指向娱乐主体
+  # （避免「基因在染色体上」「SM 是什么」被当成追星内容）
+  ambiguous_anchors:
+    染色体: ["家族", "演唱会", "舞台", "打歌", "直拍", "练习室", "男团", "女团", "练习生", "娱乐", "张艺兴", "公司"]
+    SM: ["家族", "娱乐", "公司", "女团", "男团", "练习生", "李秀满"]
+
+# 模型调用层（2026-11-09）。三层默认全关，逐个开、逐个测。
+# 约定：任何一层调用失败都只跳过该层，不影响 09:00 发信；日志里会写明降级原因。
+llm:
+  enabled: true                  # 总开关；off 时代码完全不发请求
+  base_url: "https://api.deepseek.com/v1"
+  model: "deepseek-flash"        # DeepSeek-V4.1-Flash 的正式模型名
+  api_key_env: "RADAR_LLM_KEY"   # 只写变量名；值放项目根目录 .env
+  temperature: 0                 # 必须 0：日报要可复现，跨天复用靠 streak 比对
+  timeout_seconds: 60
+  max_retries: 2
+  max_output_tokens: 6000        # 留足余量：thinking 模式会先写思考再写答案，4000 曾截断
+  json_mode: true                # response_format=json_object；供应商不认时自动退化
+  cache: "data/state/llm_cache.json"
+  cache_ttl_days: 3
+  extra_body: {}                 # 透传字段（如关 thinking）。不确定参数名就别填，不猜
+  layers:
+    # L1 查询生成：产出落 data/input/query_plan_llm.json，不混进当天计划
+    plan:
+      enabled: false
+      quota: 6
+    # L2 素材理解：按搜索查询分组，一组一次调用
+    material:
+      enabled: true
+      max_items_per_query: 40
+      min_items: 3               # 少于 3 条的分组跳过（凑不出 2 条证据，纯烧钱）
+      max_calls: 30
+    # L3 噪声误伤检测：只送「证据 ≥3 条却被判噪声」的素材（信号自相矛盾）。
+    # 平时几乎不触发，词表失灵那天报警。硬领域也送 —— 11-09 的两次误判正是硬领域造成的。
+    adjudicate:
+      enabled: false
+      max_calls: 25
+      min_evidence: 3
+    # D 标签层 / 文案评估：判 phrases_todo.json 的标签（长期），
+    # 以及当天这批句子「能不能当二创文案用、怎么用」（每天一次，直接进日报）
+    phrase:
+      enabled: true
+      # 送模型评估的最大条数。注意 `top_phrases()` 默认只产出 8 条，
+      # 所以实际生效的是 min(8, max_items)；想让评估覆盖更多原料，得先调它的 limit。
+      max_items: 12
+  # 文档注入按「层 → 章节」固定映射，见 src/llm/context.py 的 LAYER_SECTIONS。
+  # 不在这里配置：哪层该看哪几节是设计决定，不是运行参数。
+
+
+# 自动运行：三条触发路径（登录后 2 分钟 / 每天 09:00 / 11:30 失败重试）共用 scripts/daily_run.py
+# 由 data/state/daily_lock.json 的单日锁保证「一天只成功跑一次」
+automation:
+  daily_time: "09:00"        # 09:00 触发（install_task.py 读这里生成触发器）
+  boot_delay_seconds: 120    # 登录触发后延迟（同上，换算成秒）
+  retry_time: "11:30"        # 失败重试触发时间（同上）
+  ensure_edge: true          # 跑之前检查 9222，未就绪则启动
+  # ⚠️ 实测：headless 会被抖音拦到「验证码中间页」（卡片数 0），必须用窗口模式
+  edge_headless: false
+  plan_timeout_min: 5
+  collect_timeout_min: 90    # 采集**整个阶段**的预算（含重试），不是单次上限
+  collect_retries: 4         # 采集最多尝试几次：整轮失败、或「进程正常退出但覆盖率不足」都会续采
+  collect_retry_wait_s: 60   # 两次尝试之间等多久（给 Edge / 风控留恢复时间）
+  min_coverage: 0.7          # 成功查询 / 计划查询 低于这个比例就续采（软拦截会正常退出但只采到几个）
+  coverage_wait_s: 240       # 覆盖率不足时的等待（软拦截通常几分钟后恢复）
+  judge_timeout_min: 10
+
+# 投递：邮件（QQ 邮箱；账号信息放 .env，不进配置）
+delivery:
+  email:
+    enabled: true
+    smtp_host: smtp.qq.com
+    smtp_port: 465
+    security: ssl            # ssl / starttls
+    from_name: 追星二创雷达
+    attach_markdown: true    # 附上完整 report.md
+    timeout_seconds: 20
+    limits:                  # 邮件里每块最多显示多少条
+      circle: 8
+      cross: 3
+      refs_per_material: 3
+      clusters: 4
+      chart_news: 8
+      phrases: 8
+      candidates: 10
+
+# 分层清理：避免 sandbox 无限膨胀（每次 --run 结束自动执行）
+cleanup:
+  heavy_days: 7      # candidates.json 等重文件保留天数（每个自然日只留最新一轮）
+  log_days: 30       # sandbox/logs/*.log
+  diag_days: 3       # 失败截图目录
+  diag_max: 50       # 截图总数上限
+  max_days: 0        # >0 时整轮目录超过该天数全删（0 = 永久保留轻量资产）

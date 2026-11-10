@@ -1,0 +1,10 @@
+httpx>=0.27,<1.0
+pydantic>=2.6,<3.0
+PyYAML>=6.0,<7.0
+python-dotenv>=1.0,<2.0
+tzdata>=2024.1          # Windows 上 zoneinfo 需要它才能识别 Asia/Shanghai
+playwright>=1.40        # scripts/collect_douyin.py 用 CDP 连 Edge（采集阶段必需）
+
+# dev
+pytest>=8.0,<9.0
+ruff>=0.4

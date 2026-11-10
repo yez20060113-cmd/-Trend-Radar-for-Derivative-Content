@@ -1,0 +1,18 @@
+# 换行统一交给 git 处理：仓库里存 LF，checkout 时按平台转换。
+# 不加这一行，Windows 上编辑过的文件在 mac/linux clone 后会整个文件都变成 diff。
+* text=auto
+
+# 脚本类保持 CRLF，否则 cmd/bat 在 Windows 上会执行失败
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制，不做换行转换
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.xlsx binary
+*.pdf binary

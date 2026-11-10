@@ -1,0 +1,32 @@
+# ---- 环境 / 依赖 ----
+.venv/
+.env
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+*.tmp
+
+# ---- 浏览器调试配置（含登录 cookie 与浏览历史，绝不能入库）----
+.edge-cdp/
+.edge-cdp*/
+
+# ---- 词库 ----
+# 含真实主体名单与别名映射，不入库；仓库里只放 CoreAssets/keywords.template.md
+# 用通配符兜住 keywords.json / keywords.bak.json / keywords-20261109.json 这类备份
+CoreAssets/keywords*.json
+
+# ---- 运行时数据：真实采集、状态、每日产出 ----
+memory/
+sandbox/
+*.log
+
+data/input/*
+data/daily/*
+data/state/*
+# 保留目录骨架，让 clone 下来结构完整
+!data/**/.gitkeep
+
+# ---- 系统垃圾 ----
+.DS_Store
+Thumbs.db
