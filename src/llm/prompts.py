@@ -251,6 +251,19 @@ PHRASE_EVAL_SYSTEM = """你是追星二创的文案策划。
 - `usage`：一句话说明「可以配什么样的画面」（例如：配偶像练习室到舞台的对比剪辑）
 - `source`：这句出自哪里（哪首歌的歌词 / 哪个综艺 / 哪部剧），不知道就留空
 
+**两个辅助信号，用来判断时效和圈层**：
+
+1. **圈内占比**：这条短语出现在多少条「提到你关注主体」的内容里。
+   注意它只是参考，**不要看到「纯跨圈」就直接 skip**：
+
+   - 圈内 0 **且**语境属于别的圈层自己的事（家庭剧、婆媳、情感号、社会新闻、母婴、装修）→ `skip`
+   - 圈内 0 **但**属于通用表达（单人转场、舞蹈动作、网络热梗、励志口号）→ 照常判 `use` 或 `watch`
+   - 判断依据是**这句话离开原语境后，追星二创能不能用**，而不是它出现在哪个圈
+
+2. **已出现天数**：这条短语在我们的数据里已经存在多少天。
+   ≥14 天说明它可能是常青老梗（几个月前就火了，一直在被用），
+   除非它确实好用，否则优先判 `watch` 而不是 `use`。刚出现 0~2 天的更可能是新起的热点。
+
 只输出 JSON，不要 markdown 围栏。
 """
 
@@ -264,16 +277,26 @@ PHRASE_EVAL_USER = """{n} 条候选文案：
 
 
 def phrase_eval_prompt(items: list[dict]) -> tuple[str, str]:
-    """items 每项：phrase / videos / likes_max / contexts / bgm（关联到的素材名）"""
+    """items 每项：phrase / videos / likes_max / contexts / bgm / circle_ratio / first_seen_days"""
     blocks = []
     for i, it in enumerate(items, 1):
         ctx = " / ".join((it.get("contexts") or [])[:3])[:200]
         bgm = it.get("bgm") or ""
+        videos = int(it.get("videos") or 0)
+        circle = int(it.get("circle_hits") or 0)
+        ratio = it.get("circle_ratio")
+        days = it.get("first_seen_days")
+        extra: list[str] = []
+        if ratio is not None:
+            extra.append(f"圈内 {circle}/{videos} 条" + ("（纯跨圈）" if circle == 0 else ""))
+        if isinstance(days, int) and days > 0:
+            extra.append(f"已出现 {days} 天")
         blocks.append(
             f"[{i}] 「{it.get('phrase')}」"
-            f"（{it.get('videos', 0)} 条视频在用，最高赞 {int(it.get('likes_max') or 0):,}）\n"
+            f"（{videos} 条视频在用，最高赞 {int(it.get('likes_max') or 0):,}）\n"
             f"    出现语境：{ctx or '（无）'}"
             + (f"\n    同期在火的素材：{bgm}" if bgm else "")
+            + (f"\n    其他信号：{'；'.join(extra)}" if extra else "")
         )
     return PHRASE_EVAL_SYSTEM, PHRASE_EVAL_USER.format(
         n=len(items), items="\n\n".join(blocks)

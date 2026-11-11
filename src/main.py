@@ -679,12 +679,34 @@ def cmd_run(prod: bool, origin: str = "test") -> int:
         exclude_phrases=set(keyword_layer(keywords, "形式层", "创作类型词"))
         | set(keyword_layer(keywords, "形式层", "场景词")),
         min_videos=int(judge_cfg.get("phrase_min_videos", 3)),
+        # 圈层信号：短语出现在多少条「提到关注主体」的内容里。
+        # 主体名 + 别名一起算，否则「A2O」这种缩写会漏判。
+        subject_names={
+            n for n in (
+                set(keyword_layer(keywords, "锚点层", "主体"))
+                | set(alias_map(keywords))
+                | {a for vs in alias_map(keywords).values() for a in vs}
+            )
+            if n and len(n) >= 2
+        },
     )
     phrases = top_phrases(
         [c for c in merged if c.source == "douyin_search"],
         labels=phrase_labels,
         **phrase_args,
     )
+
+    # 短语的跨天追踪：先读「首见于几天前」，再登记今天。
+    # 顺序不能反 —— observe 会把新词的 first_seen 设成今天，先登记就读不到年龄了。
+    # 为什么需要它：内容级门槛把 age_days 压在 0~7 天，光看内容年龄分不出老梗；
+    # 只有「这个短语在我们数据里存在了多久」才能回答「是不是几个月前的老梗」。
+    for p in phrases:
+        p["first_seen_days"] = lifecycle.age_days(str(p["phrase"]), today)
+    for p in phrases:
+        lifecycle.observe(str(p["phrase"]), "phrase", today)
+    if phrases:
+        # 上面的 lifecycle.save() 早于这里执行，不补一次的话短语登记会丢
+        lifecycle.save()
 
     # 文案可用性评估：这批句子能不能当二创文案用、怎么用。
     # 与上面的「待判定」是两件事：那个是数据清洁（长期），这个是产品判断（当天）。

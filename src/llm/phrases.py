@@ -122,6 +122,11 @@ def evaluate(
                 "likes_max": src.get("likes_max", 0),
                 "sample": (src.get("sample") or "")[:60],
                 "bgm": src.get("bgm", ""),
+                # 首见于几天前：None 表示今天第一次见（或没有历史）
+                "first_seen_days": src.get("first_seen_days"),
+                # 圈层来源：circle_hits/videos，0 表示纯跨圈
+                "circle_hits": src.get("circle_hits"),
+                "circle_ratio": src.get("circle_ratio"),
             }
         )
         stats[use] = stats.get(use, 0) + 1

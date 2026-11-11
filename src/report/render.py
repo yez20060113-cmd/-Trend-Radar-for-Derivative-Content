@@ -164,8 +164,17 @@ def render_report(
             lines.append("| 文案 | 在用 | 怎么用 | 出处 | 配套素材 |")
             lines.append("|---|---|---|---|---|")
             for p in _usable:
+                # 来源标注：圈内 N/M 条；全是跨圈就直说，让人自己判断能不能用
+                hits = p.get("circle_hits")
+                videos = p.get("videos") or 0
+                src_note = ""
+                if isinstance(hits, int):
+                    src_note = " · 跨圈" if hits == 0 else f" · 圈内 {hits}/{videos}"
+                days = p.get("first_seen_days")
+                if isinstance(days, int) and days >= 14:
+                    src_note += " · 常青老梗"
                 lines.append(
-                    f"| **{_cell(p['phrase'], 22)}** | {p['videos']} 条 "
+                    f"| **{_cell(p['phrase'], 22)}** | {p['videos']} 条{src_note} "
                     f"| {_cell(p.get('usage', ''), 30)} "
                     f"| {_cell(p.get('source', ''), 18)} "
                     f"| {_cell(p.get('bgm', ''), 26)} |"

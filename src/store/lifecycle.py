@@ -11,7 +11,9 @@ from datetime import date
 from pathlib import Path
 
 # 实体抽取写入的「伪族名」：它们不是骨架，不该被骨架下线清理逻辑删掉
-TYPE_FAMILIES = {"BGM", "模板", "挑战"}
+# phrase 是复用短语（2026-11-11 加）：同样不属于任何骨架族，
+# 不保护的话每轮都会被 prune 当孤儿删掉，first_seen 天天重置，永远算「新梗」
+TYPE_FAMILIES = {"BGM", "模板", "挑战", "phrase"}
 
 
 class Lifecycle:

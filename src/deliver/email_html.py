@@ -259,6 +259,14 @@ def _phrase_eval_table(rows: list[dict[str, Any]]) -> str:
         meta_bits = [b for b in (source, bgm) if b]
         tag = "可直接用" if p.get("use") == "use" else "需改写"
         tag_color = ACCENT if p.get("use") == "use" else MUTED
+        # 来源：圈内 N/M 条；全 0 就标「跨圈」，让人知道这句不是追星圈在用
+        hits = p.get("circle_hits")
+        src_note = ""
+        if isinstance(hits, int):
+            src_note = "跨圈" if hits == 0 else f"圈内 {hits} 条"
+        days = p.get("first_seen_days")
+        if isinstance(days, int) and days >= 14:
+            src_note = (src_note + " · " if src_note else "") + "常青老梗"
         cells.append(
             f'<tr><td class="cell" width="66%" style="padding:10px 8px 10px 0;text-align:left;'
             f'border-bottom:1px solid {LINE};vertical-align:top">'
@@ -276,7 +284,9 @@ def _phrase_eval_table(rows: list[dict[str, Any]]) -> str:
             f'border-bottom:1px solid {LINE};vertical-align:top;font-size:12px;'
             f'color:{MUTED}">'
             f'<span style="color:{tag_color};font-weight:600">{tag}</span><br>'
-            f'{int(p.get("videos") or 0)} 条在用</td></tr>'
+            f'{int(p.get("videos") or 0)} 条在用'
+            + (f' · {_e(src_note)}' if src_note else "")
+            + '</td></tr>'
         )
     return (
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
@@ -522,7 +532,16 @@ def render_text(d: Digest) -> str:
         lines.append(f"== 今日可用文案（{len(d.phrase_eval)}）==")
         for p in d.phrase_eval:
             tag = "可直接用" if p.get("use") == "use" else "需改写"
-            lines.append(f"- 「{p.get('phrase')}」{int(p.get('videos') or 0)} 条 ({tag})")
+            hits = p.get("circle_hits")
+            src_note = ""
+            if isinstance(hits, int):
+                src_note = " · 跨圈" if hits == 0 else f" · 圈内 {hits} 条"
+            days = p.get("first_seen_days")
+            if isinstance(days, int) and days >= 14:
+                src_note += " · 常青老梗"
+            lines.append(
+                f"- 「{p.get('phrase')}」{int(p.get('videos') or 0)} 条 ({tag}{src_note})"
+            )
             if p.get("usage"):
                 lines.append(f"   怎么用：{p['usage']}")
             meta = " · ".join(x for x in (p.get("source"), p.get("bgm")) if x)
