@@ -33,7 +33,7 @@ sources:
     # 计划优先：scripts/plan_queries.py 生成 data/input/query_plan.json
     # 下面的 subjects/chart_songs/templates 只在没有计划文件时兜底
     plan_file: "data/input/query_plan.json"
-    max_queries: 40        # 单轮查询上限
+    max_queries: 48        # 单轮查询上限（原 40，加 8 个「热种」）
     scroll: 5              # 每查询滚动次数（整页：16 + 10×5 ≈ 66 条）
                            # 注：若用实验开关 --spa（页内改词），建议临时调到 8——
                            # 改词不带 publish_time 过滤，需要更深才能收到同样多的新内容
@@ -47,6 +47,7 @@ sources:
       挑战: 10
       主体: 10
       发现: 5
+      热种: 8              # 来自 tunbang 聚合榜，见文件末尾 tunbang 段
     # 兜底参数
     subjects: 2
     chart_songs: 8
@@ -190,3 +191,18 @@ cleanup:
   diag_days: 3       # 失败截图目录
   diag_max: 50       # 截图总数上限
   max_days: 0        # >0 时整轮目录超过该天数全删（0 = 永久保留轻量资产）
+
+# 热点种子：从第三方聚合榜找「今天该搜什么」
+# 它不替代原有采集链路，只负责生成查询词。抓下来的标题 ≠ 结论，
+# 必须回抖音搜一次看真实使用量（由 collect_douyin 完成）。
+tunbang:
+  enabled: true
+  # 两个榜互补：娱乐榜覆盖 24 个平台但会误收/漏收，微博主榜抓综艺 CP 梗
+  boards:
+    entertainment: "https://tunbang.com/topics/entertainment/"
+    weibo: "https://tunbang.com/hot/weibo/"
+  limit: 100           # 每个榜最多取多少条
+  filter_limit: 100    # 送给模型筛的最大条数（约 3k token）
+  max_queries: 8       # 最多生成几个查询词，对应上面 quota 的「热种」
+  qps_ms: 500          # 两个榜之间的间隔
+  timeout_seconds: 20

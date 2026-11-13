@@ -55,6 +55,7 @@ summary: 运维手册——目录与文件职责、环境准备、日常跑批�
 | `llm/prompts.py` | 四套 prompt（L1 查询 / L2 素材 / L3 复核 / D 短语）+ 判定标准注入 |
 | `llm/material.py` | L2 素材理解：按搜索查询分组，输出 `EntityHit`；evidence url 必须回链，否则整条作废 |
 | `llm/adjudicate.py` | L3 噪声误伤检测：只送「证据 ≥3 条却仍被判噪声」的素材（信号自相矛盾），硬领域也送 |
+| `llm/seed_filter.py` | 热点种子：判聚合榜的 100 条热搜「能不能变成素材」（A物料/B玩法/C句子/D主体），再按类型拼查询词 |
 | `llm/plan.py` | L1 查询生成：模型召回世界知识 → 产出待验证的查询词，不直接进计划 |
 | `llm/phrases.py` | D 标签层：批量判 `phrases_todo.json`，结果写 `phrase_labels.json` |
 | `store/lifecycle.py` | 模板词龄（first_seen），旧梗自动降权 |
@@ -71,7 +72,8 @@ summary: 运维手册——目录与文件职责、环境准备、日常跑批�
 |---|---|---|
 | `launch_edge.py` | 启动带调试端口的 Edge（脱离父进程，不被回收）；`--check` 只查端口 | 每次跑批前 |
 | `doctor.py` | 环境自检：依赖 / `.env` / 代理 / 9222 / 数据规模 / 模型开关。有问题给退出码 1 | **出任何问题先跑它** |
-| `plan_queries.py` | 生成当日检索计划 `data/input/query_plan.json`（歌名/挑战/主体/发现四类配额）；挑战类先取热榜、再用上轮结果补齐 | 每次采集前 |
+| `collect_seeds.py` | 抓 tunbang 聚合榜（娱乐榜 + 微博榜）→ 模型判「有没有二创价值」→ 转成抖音查询词，写 `data/input/hot_seeds.json`。失败不阻塞跑批 | 生成计划之前 |
+| `plan_queries.py` | 生成当日检索计划 `data/input/query_plan.json`（歌名/挑战/主体/发现/热种五类配额）；挑战类先取热榜、再用上轮结果补齐 | 每次采集前 |
 | `collect_douyin.py` | 按 `query_plan.json` 用 CDP 采集 → `data/input/douyin_latest.json`；支持 `--resume` / `--limit` / `--scroll` / `--max-empty` / `--max-shots` / `--page-recycle` / `--spa`（改词优先，实验）/ `--retries` / `--select-timeout` / `--empty-cooldowns`（风控窗口里用「快速浅扫」：`--retries 1 --select-timeout 8 --empty-cooldowns 0`，靠多轮累积而不是单轮重试） | 每次跑批 |
 | `probe/probe_search_mode.py` | 对比「整页 goto」与「页内改词」的产出质量：条数、URL 重合率、时效分布、请求数 | 改采集方式前后 |
 | `probe/cdp_probe.py` | 单次探测搜索页，排障用 | 采集异常时 |
@@ -348,6 +350,7 @@ python -m src.main --clean --days 30       # 整体删除 30 天前的运行目�
 | **L2 素材理解** | 一个搜索查询下的 40 条文案整批读，说出「这里有哪种具名素材」 | 不当判定层：产出只是多一个抽取器，仍走 aggregate → judge | `layers.material.enabled` |
 | **L3 噪声误伤检测** | 只送「证据 ≥3 条 **却仍被判噪声**」的素材——信号自相矛盾，多半是词表误伤 | 不送「差 1 条到门槛」的卡（那是证据不足）；不新增/改名素材 | `layers.adjudicate.enabled` |
 | **D 文案层** | ① 批量判 `phrases_todo.json` 的标签（长期，写 `phrase_labels.json`）② 每天判一次「这些句子能不能当二创文案用、怎么用」，直接进日报 | 不改素材判定；模型没开/失败就退回原来的「复用短语」栏 | `layers.phrase.enabled` |
+| **热点种子** | 判聚合榜热搜「能不能变成素材」（A物料/B玩法/C句子/D主体），再转成抖音查询词；不替代采集链路，只负责「今天该搜什么」 | 抓下来的标题 ≠ 结论，必须回抖音验使用量 | `tunbang.enabled` |
 
 **当前状态（2026-11-09 17:40）**：`llm.enabled: true`，只开了 `material`（L2）。
 L1 还没接进流水线（要先联网验证产出质量）；L3 平时不触发（今天的正式数据上是 0 个矛盾样本）；

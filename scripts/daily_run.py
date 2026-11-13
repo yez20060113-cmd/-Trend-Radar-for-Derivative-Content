@@ -350,6 +350,15 @@ def main() -> int:
                 edge_proc = ensure_edge(bool(auto_cfg.get("edge_headless", False)))
 
             if not args.skip_collect:
+                # 热点种子：抓聚合榜 → 模型筛 → 生成「热种」查询词。
+                # 放在生成计划之前，plan_queries 会读它。
+                # 失败不阻塞：第三方站或模型挂了，顶多少几个查询。
+                try:
+                    run_step("抓取热点种子", ["scripts/collect_seeds.py"],
+                             int(auto_cfg.get("seed_timeout_min", 5)) * 60)
+                except Exception as exc:  # noqa: BLE001
+                    log(f"⚠ 热点种子跳过（{exc}），继续用原有查询")
+
                 run_step("生成检索计划", ["scripts/plan_queries.py"],
                          int(auto_cfg.get("plan_timeout_min", 5)) * 60)
 

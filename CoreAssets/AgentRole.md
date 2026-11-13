@@ -45,8 +45,11 @@ summary: 总控入口——角色定义、文件职责、读取规则、工作�
    ├─ 读 3 份 md（本文件 / InputOutput / HotspotCriteria）
    └─ 读 keywords.json（含模式层：模板骨架 + 校验词 + 已知实例）
         │
-② 检索计划 + 采集
-   ├─ 计划：plan_queries.py → query_plan.json（歌名/挑战/主体/发现四类配额）
+② 找热点 + 检索计划 + 采集
+   ├─ 热种：collect_seeds.py 抓聚合榜（tunbang）→ 模型筛 → 转查询词
+   │   · 产出 data/input/hot_seeds.json，作为「热种」类并入计划
+   │   · 失败不影响跑批（第三方站 + 模型，可能挂）
+   ├─ 计划：plan_queries.py → query_plan.json（歌名/挑战/主体/发现/热种五类配额）
    │   · 可选 L1：llm_plan.py 让模型召回一批查询词 → query_plan_llm.json
    │     不自动并入计划，要 --merge 才合并（产出未验证，默认不走）
    ├─ 抖音搜索：Edge 开 --remote-debugging-port，脚本直连 CDP

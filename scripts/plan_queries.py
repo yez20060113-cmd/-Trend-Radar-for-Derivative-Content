@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -223,6 +223,48 @@ def _discovery_queries(used: set[str], limit: int) -> list[dict]:
     return out
 
 
+def _hot_seed_queries(used: set[str], limit: int) -> list[dict]:
+    """读「热点种子」，来自 scripts/collect_seeds.py（抓 tunbang + 模型筛选 + 转化）。
+
+    为什么优先级高于「发现」类：发现类的词源是「上轮结果」，会自我强化；
+    热种是外部输入，能带来我们没见过的东西（11-13 的「厉娜以下」就是这么来的）。
+
+    过期保护：只认今天或昨天的种子。拿不到就当没有——这是增强项，
+    不能因为第三方站挂了就中断整个计划生成。
+    """
+    path = ROOT / "data" / "input" / "hot_seeds.json"
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+
+    gen = str(data.get("generated_at") or "")[:10]
+    today = datetime.now().strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    if gen and gen not in {today, yesterday}:
+        return []
+
+    out: list[dict] = []
+    for q in data.get("queries") or []:
+        word = str(q.get("q") or "").strip()
+        if not word or word.lower() in used:
+            continue
+        used.add(word.lower())
+        out.append(
+            {
+                "q": word,
+                "type": "热种",
+                "reason": f"聚合榜·{q.get('kind', '')}｜{str(q.get('from_title') or '')[:18]}",
+                "priority": 0.8,
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _interleave(batches: list[list[dict]], max_queries: int) -> list[dict]:
     """按类型轮流取，而不是「一类跑完再下一类」。
 
@@ -268,8 +310,10 @@ def main() -> int:
     ]
     used = {item["q"].lower() for batch in batches for item in batch}
     batches.append(_discovery_queries(used, int(quotas.get("发现", 5))))
+    used |= {item["q"].lower() for item in batches[-1]}
+    batches.append(_hot_seed_queries(used, int(quotas.get("热种", 8))))
 
-    # 交错：歌名 / 挑战 / 主体 / 发现 轮流上，避免「前面把额度用完、只剩一类」
+    # 交错：歌名 / 挑战 / 主体 / 发现 / 热种 轮流上，避免「前面把额度用完、只剩一类」
     queries = _interleave(batches, max_queries)
     plan = {
         "date": datetime.now().strftime("%Y-%m-%d"),

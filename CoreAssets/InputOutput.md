@@ -189,6 +189,7 @@ B站长标题不参与（多数是同一事件的不同描述，不是文案梗�
 | `llm_material.json` | L2 抽出的素材 + 证据 + 置信度 + 被拒原因（证据不实/名字不合规） | 评估 L2 效果 |
 | `llm_verdicts.json` | L3 的 keep/drop 明细与矛盾理由 | 评估 L3，解释「为什么这张卡被救回」 |
 | `phrase_eval.json` | 文案可用性评估：原句 / use-watch-skip / 怎么用 / 出处 / 关联素材 | 复盘「今天哪些句子真的能用」 |
+| `data/input/hot_seeds.json` | 聚合榜筛选结果 + 生成的查询词（不在 run 目录，是计划的输入） | `plan_queries.py` 读它，生成「热种」类查询 |
 | `llm_calls/NNN-<层>.json` | 每次模型调用的耗时、token、完整请求/响应 | 模型出问题时的唯一证据 |
 | `bgm_plan.json` | BGM 采样计划与跳过原因 | 采样配额排查 |
 

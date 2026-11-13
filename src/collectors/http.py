@@ -64,3 +64,28 @@ class Fetcher:
                 if attempt < retries:
                     time.sleep(2)
         raise FetchError(f"{url} 请求失败: {last_err}") from last_err
+
+    def get_text(
+        self,
+        url: str,
+        *,
+        referer: str | None = None,
+        qps_ms: int = 0,
+        retries: int = 1,
+    ) -> str:
+        """抓 HTML。给服务端渲染的第三方榜用（如 tunbang），不需要浏览器。"""
+        headers = {"Referer": referer} if referer else None
+        last_err: Exception | None = None
+        for attempt in range(retries + 1):
+            self._throttle(qps_ms)
+            try:
+                resp = self._client.get(url, headers=headers)
+                resp.raise_for_status()
+                if not resp.encoding or resp.encoding.lower() == "iso-8859-1":
+                    resp.encoding = "utf-8"
+                return resp.text
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+                if attempt < retries:
+                    time.sleep(2)
+        raise FetchError(f"{url} 请求失败: {last_err}") from last_err
