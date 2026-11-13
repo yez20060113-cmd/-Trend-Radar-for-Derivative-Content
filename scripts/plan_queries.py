@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -37,6 +38,8 @@ from src.judge.anchor import context as anchor_context  # noqa: E402
 from src.judge.anchor import match_subject  # noqa: E402
 
 OUT = ROOT / "data" / "input" / "query_plan.json"
+# 验证时用 --seeds 指向 sandbox 的种子文件，不碰 data/input 的真实数据
+SEEDS_PATH: Path | None = None
 RUNS = ROOT / "sandbox" / "runs"
 
 
@@ -232,7 +235,7 @@ def _hot_seed_queries(used: set[str], limit: int) -> list[dict]:
     过期保护：只认今天或昨天的种子。拿不到就当没有——这是增强项，
     不能因为第三方站挂了就中断整个计划生成。
     """
-    path = ROOT / "data" / "input" / "hot_seeds.json"
+    path = SEEDS_PATH or (ROOT / "data" / "input" / "hot_seeds.json")
     if not path.exists():
         return []
     try:
@@ -297,6 +300,16 @@ def _interleave(batches: list[list[dict]], max_queries: int) -> list[dict]:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="", help="计划输出路径（默认 data/input/query_plan.json）")
+    ap.add_argument("--seeds", default="", help="热点种子文件（默认 data/input/hot_seeds.json）")
+    args = ap.parse_args()
+
+    global SEEDS_PATH
+    if args.seeds:
+        SEEDS_PATH = Path(args.seeds)
+    out_path = Path(args.out) if args.out else OUT
+
     cfg = load_sources().get("sources", {}).get("douyin_search", {})
     max_queries = int(cfg.get("max_queries", 40))
     scroll = int(cfg.get("scroll", 5))
@@ -321,13 +334,13 @@ def main() -> int:
         "budget": {"max_queries": max_queries, "scroll": scroll},
         "queries": queries,
     }
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
 
     counts: dict[str, int] = {}
     for q in queries:
         counts[q["type"]] = counts.get(q["type"], 0) + 1
-    print(f"计划 {len(queries)} 个查询（{counts}），每查询滚动 {scroll} 次 → {OUT}")
+    print(f"计划 {len(queries)} 个查询（{counts}），每查询滚动 {scroll} 次 → {out_path}")
     for q in queries[:8]:
         print(f"  [{q['type']}] {q['q'][:30]:<32}{q['reason']}")
     return 0

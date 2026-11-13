@@ -579,6 +579,8 @@ def main() -> int:
         print(f"[env] 已对 localhost 关闭代理（清掉 {', '.join(removed)}）")
 
     ap = argparse.ArgumentParser()
+    ap.add_argument("--plan", default="", help="指定检索计划（默认 data/input/query_plan.json）")
+    ap.add_argument("--out", default="", help="指定输出文件（默认 data/input/douyin_latest.json）")
     ap.add_argument("--scroll", type=int, default=None, help="每查询滚动次数（覆盖计划）")
     ap.add_argument("--resume", action="store_true", help="跳过已采过的查询")
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 个查询（调试用）")
@@ -598,6 +600,13 @@ def main() -> int:
     ap.add_argument("--spa", action="store_true",
                     help="改词优先（请求少 70%%，但会丢 publish_time 过滤，默认关闭；整页被挡时仍会自动用改词救急）")
     args = ap.parse_args()
+
+    # 调试/验证时把产物写到 sandbox，不碰 data/input 的真实数据
+    global PLAN, OUT
+    if args.plan:
+        PLAN = Path(args.plan)
+    if args.out:
+        OUT = Path(args.out)
 
     dcfg = load_sources().get("sources", {}).get("douyin_search", {})
     delay_min = float(dcfg.get("delay_min", 8.0))

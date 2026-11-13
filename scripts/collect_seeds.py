@@ -36,6 +36,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry", action="store_true", help="只抓不筛")
     ap.add_argument("--limit", type=int, default=0, help="只筛前 N 条，0 表示全量")
+    ap.add_argument("--out", default="", help="输出路径（默认 data/input/hot_seeds.json）")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -70,8 +71,9 @@ def main() -> int:
         kept, stats = seed_filter.select(llm, seeds, limit=limit)
         queries = seed_filter.to_queries(kept, max_queries=int(tb.get("max_queries", 8)))
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(
+    out = Path(args.out) if args.out else OUT
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
         json.dumps(
             {
                 "generated_at": now,
@@ -91,7 +93,7 @@ def main() -> int:
     log.info("查询词 %d 个：", len(queries))
     for q in queries:
         log.info("  [%s] %-20s ← %s", q["kind"], q["q"], q["from_title"][:26])
-    log.info("已写入 %s", OUT)
+    log.info("已写入 %s", out)
     return 0
 
 
