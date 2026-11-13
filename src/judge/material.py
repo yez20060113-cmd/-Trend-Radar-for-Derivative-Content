@@ -97,6 +97,7 @@ def judge_materials(
     extra_noise: list[str] | None = None,
     recent_hot: dict[str, dict] | None = None,
     max_repeat: int = 3,
+    max_repeat_cross: int = 1,
     repeat_growth: float = 0.2,
     llm_verdicts: dict[str, str] | None = None,
 ) -> list[Material]:
@@ -221,12 +222,19 @@ def judge_materials(
                 mat.reason = f"{mat.reason}；连续第 {streak + 1} 天{note}"
 
     kept: list[Material] = []
-    repeats_taken = 0
-    for circle, cap in ((CIRCLE_IN, max_output), (CIRCLE_OUT, max_cross)):
+    # 复用额度必须按圈层分开算。
+    # 原来是一个计数器跨两个循环共享：圈内用满 3 个，跨圈的 repeat 卡就全部判「额度已满」，
+    # 结果是 25 条的卡被 3 条的卡挤掉（2026-11-10 实测）。跨圈 cap 只有 3，
+    # 全给老面孔就一个新品都进不来，所以那边单独设更小的额度（默认 1）。
+    for circle, cap, repeat_cap in (
+        (CIRCLE_IN, max_output, max_repeat),
+        (CIRCLE_OUT, max_cross, max_repeat_cross),
+    ):
         pool = [m for m in materials if m.cls == "热点" and m.circle == circle]
         pool.sort(key=lambda m: (-m.score, m.name))
         counts: dict[str, int] = {}
         taken = 0
+        repeats_taken = 0
         for mat in pool:
             # 配额按「关注主体」算，不按展示用的歌手串：
             # BGM 卡的 artist 是「A2O LITE、A2O」这种拼接，同团两首歌会拿到两个不同的键。
@@ -240,9 +248,9 @@ def judge_materials(
                 mat.reason = f"{mat.reason}；超出单日输出上限"
                 continue
             # 复用卡单日额度：保证每天都有一批新面孔
-            if mat.repeat and repeats_taken >= max_repeat:
+            if mat.repeat and repeats_taken >= repeat_cap:
                 mat.cls = "候选"
-                mat.reason = f"{mat.reason}；今日复用额度已满（{max_repeat} 张）"
+                mat.reason = f"{mat.reason}；今日复用额度已满（{repeat_cap} 张）"
                 continue
             counts[key] = counts.get(key, 0) + 1
             if mat.repeat:

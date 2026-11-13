@@ -15,6 +15,29 @@ from pathlib import Path
 # 不保护的话每轮都会被 prune 当孤儿删掉，first_seen 天天重置，永远算「新梗」
 TYPE_FAMILIES = {"BGM", "模板", "挑战", "phrase"}
 
+# 短语归一化的门槛：最长公共子串 ≥4 字，且占较长那个词的 ≥60%
+# 「你就这样闯进我」vs「就这样闯进我的心窝」→ LCS「就这样闯进」5 字，5/8=0.63 → 合并
+# 「我要逮捕你」vs「你被逮捕了」→ LCS「逮捕」2 字，太短 → 不合并（避免误伤）
+_SIMILAR_MIN_COMMON = 4
+_SIMILAR_THRESHOLD = 0.6
+
+
+def _lcs_len(a: str, b: str) -> int:
+    """最长公共子串长度。短语都很短（<20 字），O(n·m) 够用。"""
+    if not a or not b:
+        return 0
+    prev = [0] * (len(b) + 1)
+    best = 0
+    for ch in a:
+        cur = [0] * (len(b) + 1)
+        for j, cj in enumerate(b, 1):
+            if ch == cj:
+                cur[j] = prev[j - 1] + 1
+                if cur[j] > best:
+                    best = cur[j]
+        prev = cur
+    return best
+
 
 class Lifecycle:
     def __init__(self, path: Path) -> None:
@@ -61,6 +84,41 @@ class Lifecycle:
         except ValueError:
             return None
         return max(0, (now - first).days)
+
+    def find_similar(
+        self,
+        word: str,
+        family: str,
+        *,
+        min_common: int = _SIMILAR_MIN_COMMON,
+        threshold: float = _SIMILAR_THRESHOLD,
+    ) -> tuple[str | None, dict | None]:
+        """在同类记录里找同一个梗的其他写法，返回 (代表词, 记录)；找不到返回 (None, None)。
+
+        为什么需要：短语是 n-gram 切出来的，同一句话在不同内容里长度不同，
+        会产生「你就这样闯进我」「就这样闯进我的心窝」这类碎片。
+        不归一化的话每轮都被当成新词，`first_seen` 天天重置，
+        「常青老梗」永远不会触发（2026-11-13 发现）。
+
+        取「首见最早」的那个，而不是相似度最高的——今天刚登记的碎片
+        跟查询词完全一样（ratio=1.0），按相似度排会命中它自己，年龄永远是 0。
+        """
+        best: tuple[str, str, dict] | None = None   # (first_seen, 词, 记录)
+        for key, rec in self.data.items():
+            if rec.get("family") != family:
+                continue
+            common = _lcs_len(word, key)
+            if common < min_common:
+                continue
+            ratio = common / max(len(word), len(key))
+            if ratio < threshold:
+                continue
+            first = str(rec.get("first_seen") or "")
+            if best is None or first < best[0]:
+                best = (first, key, rec)
+        if not best:
+            return None, None
+        return best[1], best[2]
 
     @staticmethod
     def weight(age: int | None) -> int:

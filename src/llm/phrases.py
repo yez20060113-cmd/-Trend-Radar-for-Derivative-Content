@@ -124,6 +124,8 @@ def evaluate(
                 "bgm": src.get("bgm", ""),
                 # 首见于几天前：None 表示今天第一次见（或没有历史）
                 "first_seen_days": src.get("first_seen_days"),
+                # 归一化后的代表词：同一句的不同切法共享年龄
+                "canonical": src.get("canonical"),
                 # 圈层来源：circle_hits/videos，0 表示纯跨圈
                 "circle_hits": src.get("circle_hits"),
                 "circle_ratio": src.get("circle_ratio"),

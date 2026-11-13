@@ -91,7 +91,10 @@ judge:
   recent_days: 7         # 发布时间 ≤ N 天算强时效证据
   # 跨天复用治理（2026-11-09）：同一张卡连续出现会让日报越来越像昨天
   repeat_window_days: 4  # 往几天回看（读 data/daily/<日期>/materials.json）
-  max_repeat_cards: 3    # 单日最多保留几张「昨日已有」的卡
+  max_repeat_cards: 3    # 单日最多保留几张「昨日已有」的卡（只用于圈内）
+  # 跨圈单独设更小的额度：跨圈 cap 只有 3，全给老面孔就一个新品都进不来。
+  # 之前圈内/跨圈共用一个计数器，圈内用满就把跨圈的 repeat 卡全判死（11-10 实测 25 条被 3 条挤掉）。
+  max_repeat_cross: 1
   repeat_growth_min: 0.2 # 连续第 3 天出现时，mentions 至少要涨 20% 才继续占位
   phrase_min_videos: 3   # 复用短语至少被几条不同视频使用
 

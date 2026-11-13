@@ -561,6 +561,7 @@ def cmd_run(prod: bool, origin: str = "test") -> int:
         extra_noise=top_list(keywords, "噪声黑名单"),
         recent_hot=recent_hot,
         max_repeat=int(judge_cfg.get("max_repeat_cards", 3)),
+        max_repeat_cross=int(judge_cfg.get("max_repeat_cross", 1)),
         repeat_growth=float(judge_cfg.get("repeat_growth_min", 0.2)),
         llm_verdicts=llm_verdict_map or None,
     )
@@ -696,14 +697,19 @@ def cmd_run(prod: bool, origin: str = "test") -> int:
         **phrase_args,
     )
 
-    # 短语的跨天追踪：先读「首见于几天前」，再登记今天。
+    # 短语的跨天追踪：先归一化，再读年龄，最后登记。
     # 顺序不能反 —— observe 会把新词的 first_seen 设成今天，先登记就读不到年龄了。
-    # 为什么需要它：内容级门槛把 age_days 压在 0~7 天，光看内容年龄分不出老梗；
-    # 只有「这个短语在我们数据里存在了多久」才能回答「是不是几个月前的老梗」。
+    # 为什么需要归一化：短语是 n-gram 切的，「你就这样闯进我」和「就这样闯进我的心窝」
+    # 是同一条梗，不合并的话每轮都算新词，「常青老梗」永远标不出来（2026-11-13）。
     for p in phrases:
-        p["first_seen_days"] = lifecycle.age_days(str(p["phrase"]), today)
-    for p in phrases:
-        lifecycle.observe(str(p["phrase"]), "phrase", today)
+        word = str(p["phrase"])
+        canon, rec = lifecycle.find_similar(word, "phrase")
+        p["canonical"] = canon or word
+        p["first_seen_days"] = lifecycle.age_days(canon or word, today)
+        lifecycle.observe(word, "phrase", today)
+        # 新登记的碎片继承代表词的首见日期，让同一句的不同切法共享年龄
+        if rec and canon and canon != word and lifecycle.data.get(word, {}).get("first_seen") == today:
+            lifecycle.data[word]["first_seen"] = rec.get("first_seen", today)
     if phrases:
         # 上面的 lifecycle.save() 早于这里执行，不补一次的话短语登记会丢
         lifecycle.save()
